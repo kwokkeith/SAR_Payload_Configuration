@@ -1,3 +1,10 @@
+"""
+Mission base class for radar satellite missions.
+
+Author: Kwok Keith
+Date: 14 Jan 2026
+"""
+
 from abc import abstractmethod
 from dataclasses import dataclass
 import numpy as np
