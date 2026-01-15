@@ -27,3 +27,13 @@ class Satellite:
         """Flat Earth slant range approximation."""
         theta_rad = np.deg2rad(self.look_angle_from_nadir_deg)
         return self.orbit_altitude_m / np.cos(theta_rad)
+
+    @property
+    def radar_loss_linear(self) -> float:
+        """Convert radar loss from dB to linear scale."""
+        return 10.0 ** (self.radar_loss_db / 10.0)
+
+    @property
+    def receiver_noise_factor_linear(self) -> float:
+        """Convert receiver noise factor from dB to linear scale."""
+        return 10.0 ** (self.receiver_noise_factor_db / 10.0)

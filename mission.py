@@ -40,6 +40,19 @@ class Mission:
         return delta_r
 
     @property
+    def atmospheric_loss_db(self) -> np.float64:
+        """Calculate the atmospheric loss in dB scale."""
+        return (
+            self.environment_parameters.two_way_atmospheric_loss_db
+            * self.satellite.slant_range_flat_earth_m
+        )
+
+    @property
+    def atmospheric_loss_linear(self) -> np.float64:
+        """Calculate the atmospheric loss in linear scale."""
+        return 10.0 ** (self.atmospheric_loss_db / 10.0)
+
+    @property
     def thermal_loss_linear(self) -> np.float64:
         """Calculate the thermal noise loss in linear scale."""
         T_k = self.environment_parameters.nominal_temperature_k
@@ -52,14 +65,21 @@ class Mission:
     def system_loss_linear(self) -> np.float64:
         """Calculate the total system loss in linear scale."""
         L_radar = self.satellite.radar_loss_linear
-        L_thermal = self.thermal_loss_linear
-        L_range = self.signal.range_processing_loss
-        L_azimuth = self.signal.azimuth_processing_loss
-        L_total = L_radar * L_thermal * L_range * L_azimuth
+        L_atmosphere = self.atmospheric_loss_linear
+        L_range = self.signal.range_processing_loss_linear
+        L_azimuth = self.signal.azimuth_processing_loss_linear
+        L_total = L_radar * L_atmosphere * L_range * L_azimuth
         return L_total
 
     @property
-    def nes0(self) -> np.float64:
+    def system_loss_db(self) -> np.float64:
+        """Calculate the total system loss in dB scale."""
+        L_total_linear = self.system_loss_linear
+        L_total_db = 10.0 * np.log10(L_total_linear)
+        return L_total_db
+
+    @property
+    def nes0_linear(self) -> np.float64:
         """Calculate the Noise Equivalent Sigma Zero (NES0)."""
         lambda_m = self.signal.nominal_wavelength_m
         P_avg_w = self.phased_array.average_tx_power_w
@@ -75,6 +95,13 @@ class Mission:
             P_avg_w * G**2 * lambda_m**3 * delta_r_m * a_wa
         )
         return nes0
+
+    @property
+    def nes0_db(self) -> np.float64:
+        """Calculate the Noise Equivalent Sigma Zero (NES0) in dB."""
+        nes0_linear = self.nes0_linear
+        nes0_db = 10.0 * np.log10(nes0_linear)
+        return nes0_db
 
     @abstractmethod
     def azimuth_resolution_m(self) -> np.float64:

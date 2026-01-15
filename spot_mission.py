@@ -7,8 +7,10 @@ Date: 14 Jan 2026
 
 import numpy as np
 from mission import Mission
+from dataclasses import dataclass
 
 
+@dataclass
 class SpotMission(Mission):
     integration_angle_deg: np.float64  # Azimuth angle in degrees
 

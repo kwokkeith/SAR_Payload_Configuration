@@ -19,3 +19,12 @@ class PhysicalConstants:
 @dataclass(frozen=True)
 class EnvironmentParameters:
     nominal_temperature_k: np.float64 = 290.0  # Kelvin
+    two_way_atmospheric_loss_db: np.float64 = 0  # db
+
+    @property
+    def nominal_temperature_c(self) -> np.float64:
+        return self.nominal_temperature_k - 273.15
+
+    @property
+    def two_way_atmospheric_loss_linear(self) -> np.float64:
+        return 10.0 ** (self.two_way_atmospheric_loss_db / 10.0)

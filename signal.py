@@ -18,8 +18,8 @@ class Signal:
     broadening_factor_azimuth: np.float64  # a_wa
     broadening_factor_range: np.float64  # a_wr
 
-    range_processing_loss: np.float64  # L_r
-    azimuth_processing_loss: np.float64  # L_a
+    range_processing_loss_db: np.float64  # L_r
+    azimuth_processing_loss_db: np.float64  # L_a
 
     pulse_width_us: np.float64  # tau
 
@@ -42,3 +42,11 @@ class Signal:
     @property
     def receiver_noise_factor_linear(self) -> float:
         return 10.0 ** (self.receiver_noise_factor_db / 10.0)
+
+    @property
+    def range_processing_loss_linear(self) -> float:
+        return 10.0 ** (self.range_processing_loss_db / 10.0)
+
+    @property
+    def azimuth_processing_loss_linear(self) -> float:
+        return 10.0 ** (self.azimuth_processing_loss_db / 10.0)
