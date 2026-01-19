@@ -6,10 +6,9 @@ Date: 19 Jan 2026
 
 from spot_mission import SpotMission
 from mission_environment import EnvironmentParameters
-from signal import Signal
+from radar_signal import Signal
 from satellite import Satellite
 from phased_array import PhasedArray
-import numpy as np
 
 
 def main():
@@ -38,7 +37,6 @@ def main():
         element_height_m=0.053125,
         element_power_w=3.125,
         antenna_efficiency=0.95,
-        tx_duty_cycle=0.15,
     )
     environment_parameters = EnvironmentParameters(
         nominal_temperature_k=300.0,
@@ -59,8 +57,8 @@ def main():
         f"""
 Swath Width: {mission.swath_m} m
 Bandwidth: {mission.signal.bandwidth_hz / 1e6} MHz
-Transmit Power: {mission.phased_array.average_tx_power_w} W
-TX Duty Cycle: {mission.phased_array.tx_duty_cycle * 100} %
+Transmit Power: {mission.average_tx_power_w} W
+TX Duty Cycle: {mission.signal.tx_duty_cycle * 100} %
 PRF: {mission.signal.prf_hz} Hz
 Pulse Width: {mission.signal.pulse_width_us} µs
 Antenna Gain: {mission.antenna_gain_linear} W
@@ -81,7 +79,7 @@ Azimuth Processing Loss: {mission.signal.azimuth_processing_loss_db} dB
     print("--- Derived Parameters ---")
     print(
         f"""
-Average Power: {mission.phased_array.average_tx_power_w} W
+Average Power: {mission.average_tx_power_w} W
 Range: {mission.satellite.slant_range_flat_earth_m} m
 Thermal Loss: {mission.thermal_loss_linear} W
 System Loss: {mission.system_loss_linear} W

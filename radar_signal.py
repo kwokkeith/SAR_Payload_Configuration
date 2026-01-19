@@ -2,7 +2,7 @@
 Dataclass representing radar signal parameters.
 
 Author: Kwok Keith
-Date: 14 Jan 2026
+Date: 19 Jan 2026
 """
 
 from dataclasses import dataclass
@@ -10,7 +10,7 @@ import numpy as np
 from mission_environment import C
 
 
-@dataclass(frozen=True)
+@dataclass
 class Signal:
     centre_frequency_hz: np.float64  # f_c
     bandwidth_hz: np.float64  # B
@@ -49,3 +49,8 @@ class Signal:
     @property
     def azimuth_processing_loss_linear(self) -> float:
         return 10.0 ** (self.azimuth_processing_loss_db / 10.0)
+
+    @property
+    def tx_duty_cycle(self) -> np.float64:
+        """Transmit duty cycle (fraction in [0, 1])."""
+        return self.pulse_width_us * 1e-6 * self.prf_hz

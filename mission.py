@@ -8,7 +8,7 @@ Date: 19 Jan 2026
 from abc import abstractmethod
 from dataclasses import dataclass
 import numpy as np
-from signal import Signal
+from radar_signal import Signal
 from satellite import Satellite
 from phased_array import PhasedArray
 from mission_environment import EnvironmentParameters
@@ -39,8 +39,15 @@ class Mission:
         return G_db
 
     @property
+    def average_tx_power_w(self) -> np.float64:
+        return self.phased_array.total_peak_power_w * self.signal.tx_duty_cycle
+
+    @property
     def range_resolution_m(self) -> np.float64:
-        """Calculate the range resolution in metres."""
+        """
+        Calculate the range resolution in metres (this uses traditional formula).
+        Actual range resolution depends on radar signal processing.
+        """
         B = self.signal.bandwidth_hz
         a_wr = self.signal.broadening_factor_range
         delta_r = C / (2.0 * B) * a_wr  # c /(2 * BW) * a_wr
@@ -89,7 +96,7 @@ class Mission:
     def nes0_linear(self) -> np.float64:
         """Calculate the Noise Equivalent Sigma Zero (NES0)."""
         lambda_m = self.signal.nominal_wavelength_m
-        P_avg_w = self.phased_array.average_tx_power_w
+        P_avg_w = self.average_tx_power_w
         G = self.antenna_gain_linear
         L_sys = self.system_loss_linear
         R_m = self.satellite.slant_range_flat_earth_m

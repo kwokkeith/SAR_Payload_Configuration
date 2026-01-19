@@ -2,7 +2,7 @@
 This module defines a data class representing a phased array in the system.
 
 Author: Kwok Keith
-Date: 14 Jan 2026
+Date: 19 Jan 2026
 """
 
 from dataclasses import dataclass
@@ -17,7 +17,6 @@ class PhasedArray:
     element_height_m: np.float64
     element_power_w: np.float64
     antenna_efficiency: np.float64
-    tx_duty_cycle: np.float64  # fraction in [0, 1]
 
     @property
     def total_elements(self) -> int:
@@ -39,7 +38,3 @@ class PhasedArray:
     @property
     def total_peak_power_w(self) -> np.float64:
         return self.total_elements * self.element_power_w
-
-    @property
-    def average_tx_power_w(self) -> np.float64:
-        return self.total_peak_power_w * self.tx_duty_cycle
