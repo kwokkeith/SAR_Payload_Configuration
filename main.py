@@ -1,8 +1,15 @@
+"""
+Demonstration script for calculating NESZ for a Spot SAR mission.
+Author: Kwok Keith
+Date: 19 Jan 2026
+"""
+
 from spot_mission import SpotMission
-from mission_environment import PhysicalConstants, EnvironmentParameters
+from mission_environment import EnvironmentParameters
 from signal import Signal
 from satellite import Satellite
 from phased_array import PhasedArray
+import numpy as np
 
 
 def main():
@@ -33,7 +40,6 @@ def main():
         antenna_efficiency=0.95,
         tx_duty_cycle=0.15,
     )
-    physical_constants = PhysicalConstants()
     environment_parameters = EnvironmentParameters(
         nominal_temperature_k=300.0,
         two_way_atmospheric_loss_db=3.24e-06,
@@ -44,31 +50,51 @@ def main():
         signal=signal,
         satellite=satellite,
         phased_array=phased_array,
-        physical_constants=physical_constants,
         environment_parameters=environment_parameters,
         integration_angle_deg=30.0,
     )
 
+    print("--- Input Parameters ---")
     print(
-        "Effective Antenna Area (m^2):", mission.phased_array.effective_antenna_area_m2
+        f"""
+Swath Width: {mission.swath_m} m
+Bandwidth: {mission.signal.bandwidth_hz / 1e6} MHz
+Transmit Power: {mission.phased_array.average_tx_power_w} W
+TX Duty Cycle: {mission.phased_array.tx_duty_cycle * 100} %
+PRF: {mission.signal.prf_hz} Hz
+Pulse Width: {mission.signal.pulse_width_us} µs
+Antenna Gain: {mission.antenna_gain_linear} W
+Nominal Wavelength: {mission.signal.nominal_wavelength_m} m
+Broadening Factor (Azimuth): {mission.signal.broadening_factor_azimuth}
+Broadening Factor (Range): {mission.signal.broadening_factor_range}
+Look Angle (deg): {mission.satellite.look_angle_from_nadir_deg} °
+Satellite Height: {mission.satellite.orbit_altitude_m} m
+Platform Velocity: {mission.satellite.platform_velocity_mps} m/s
+Nominal Temperature: {mission.environment_parameters.nominal_temperature_k} K
+Receiver Noise Factor: {mission.satellite.receiver_noise_factor_db} dB
+Two-way Atmospheric Loss: {mission.environment_parameters.two_way_atmospheric_loss_db} dB
+Atmospheric Loss over Swath: {mission.atmospheric_loss_db} dB
+Range Processing Loss: {mission.signal.range_processing_loss_db} dB
+Azimuth Processing Loss: {mission.signal.azimuth_processing_loss_db} dB
+"""
     )
-    print("Range (m):", mission.satellite.slant_range_flat_earth_m)
-    print("Thermal Loss (linear):", mission.thermal_loss_linear)
-
-    print("\n")
-    print("L_radar (linear):", mission.satellite.radar_loss_linear)
-    print("L_thermal (linear):", mission.thermal_loss_linear)
-    print("L_range (linear):", mission.signal.range_processing_loss_linear)
-    print("L_azimuth (linear):", mission.signal.azimuth_processing_loss_linear)
-    print("L_atmosphere (db):", mission.atmospheric_loss_db)
-    print("\n")
-
-    print("System Loss (linear):", mission.system_loss_linear)
-    print("System Loss (dB):", mission.system_loss_db)
-    print("Average Power (W):", mission.phased_array.average_tx_power_w)
-    print("Nominal wavelength (m):", mission.signal.nominal_wavelength_m)
-    print("Antenna Gain (linear):", mission.antenna_gain_linear)
-    print("Range Resolution (m):", mission.range_resolution_m)
+    print("--- Derived Parameters ---")
+    print(
+        f"""
+Average Power: {mission.phased_array.average_tx_power_w} W
+Range: {mission.satellite.slant_range_flat_earth_m} m
+Thermal Loss: {mission.thermal_loss_linear} W
+System Loss: {mission.system_loss_linear} W
+Graze Angle: {mission.satellite.graze_angle_deg} °
+Range Resolution: {mission.range_resolution_m} m
+Azimuth Resolution: {mission.azimuth_resolution_m} m
+Antenna Area: {mission.phased_array.antenna_area_m2} m²
+Effective Antenna Area: {mission.phased_array.effective_antenna_area_m2} m²
+Total Elements: {mission.phased_array.total_elements} elements
+Total transmit Power: {mission.phased_array.total_peak_power_w} W
+        """
+    )
+    print("--- NESZ Calculation ---")
     print("NESZ (Noise Equivalent Sigma Zero):", mission.nes0_db, "dB")
 
 

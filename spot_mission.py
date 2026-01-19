@@ -2,7 +2,7 @@
 Spot Mission class for radar satellite missions for SPOTlight SAR processing.
 
 Author: Kwok Keith
-Date: 14 Jan 2026
+Date: 19 Jan 2026
 """
 
 import numpy as np
@@ -14,10 +14,15 @@ from dataclasses import dataclass
 class SpotMission(Mission):
     integration_angle_deg: np.float64  # Azimuth angle in degrees
 
+    @property
     def azimuth_resolution_m(self):
         """Calculate the azimuth resolution in metres for Spot Mission."""
         nominal_wavelength = self.signal.nominal_wavelength_m
-        delta_az = nominal_wavelength / (2.0 * self.integration_angle_rad)
+        delta_az = (
+            nominal_wavelength
+            / (2.0 * self.integration_angle_rad)
+            * self.signal.broadening_factor_azimuth
+        )
 
         return delta_az
 

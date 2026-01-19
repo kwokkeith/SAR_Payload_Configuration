@@ -7,6 +7,7 @@ Date: 14 Jan 2026
 
 from dataclasses import dataclass
 import numpy as np
+from mission_environment import C
 
 
 @dataclass(frozen=True)
@@ -27,9 +28,7 @@ class Signal:
 
     @property
     def nominal_wavelength_m(self) -> np.float64:
-        return np.float64(
-            3e8 / self.centre_frequency_hz
-        )  # Speed of light divided by frequency
+        return np.float64(C / self.centre_frequency_hz)
 
     @property
     def pri_s(self) -> np.float64:

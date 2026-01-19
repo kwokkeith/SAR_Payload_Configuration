@@ -2,7 +2,7 @@
 Mission base class for radar satellite missions.
 
 Author: Kwok Keith
-Date: 14 Jan 2026
+Date: 19 Jan 2026
 """
 
 from abc import abstractmethod
@@ -11,7 +11,8 @@ import numpy as np
 from signal import Signal
 from satellite import Satellite
 from phased_array import PhasedArray
-from mission_environment import PhysicalConstants, EnvironmentParameters
+from mission_environment import EnvironmentParameters
+from mission_environment import C, BOLTZMAN
 
 
 @dataclass
@@ -20,7 +21,6 @@ class Mission:
     signal: Signal
     satellite: Satellite
     phased_array: PhasedArray
-    physical_constants: PhysicalConstants
     environment_parameters: EnvironmentParameters
 
     @property
@@ -32,11 +32,18 @@ class Mission:
         return G
 
     @property
+    def antenna_gain_db(self) -> np.float64:
+        """Calculate the antenna gain in dB scale."""
+        G_linear = self.antenna_gain_linear
+        G_db = 10.0 * np.log10(G_linear)
+        return G_db
+
+    @property
     def range_resolution_m(self) -> np.float64:
         """Calculate the range resolution in metres."""
         B = self.signal.bandwidth_hz
         a_wr = self.signal.broadening_factor_range
-        delta_r = (self.physical_constants.c) / (2.0 * B) * a_wr  # c /(2 * BW) * a_wr
+        delta_r = C / (2.0 * B) * a_wr  # c /(2 * BW) * a_wr
         return delta_r
 
     @property
@@ -56,7 +63,7 @@ class Mission:
     def thermal_loss_linear(self) -> np.float64:
         """Calculate the thermal noise loss in linear scale."""
         T_k = self.environment_parameters.nominal_temperature_k
-        k_b = self.physical_constants.boltzman
+        k_b = BOLTZMAN
         F_N = self.satellite.receiver_noise_factor_linear
         L_thermal = k_b * T_k * F_N
         return L_thermal
@@ -90,10 +97,11 @@ class Mission:
         a_wa = self.signal.broadening_factor_azimuth
         v_x = self.satellite.platform_velocity_mps
         kTF_N = self.thermal_loss_linear
+        gz_ang_rad = self.satellite.graze_angle_rad
 
-        nes0 = (2 * (4 * np.pi) ** 3 * R_m**3 * v_x * kTF_N * L_sys) / (
-            P_avg_w * G**2 * lambda_m**3 * delta_r_m * a_wa
-        )
+        nes0 = (
+            2 * (4 * np.pi) ** 3 * R_m**3 * v_x * np.cos(gz_ang_rad) * kTF_N * L_sys
+        ) / (P_avg_w * G**2 * lambda_m**3 * delta_r_m * a_wa)
         return nes0
 
     @property
