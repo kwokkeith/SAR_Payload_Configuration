@@ -5,12 +5,13 @@ Author: Kwok Keith
 Date: 19 Jan 2026
 """
 
+from antenna import Antenna
 from dataclasses import dataclass
 import numpy as np
 
 
 @dataclass(frozen=True)
-class PhasedArray:
+class PhasedArray(Antenna):
     num_width_elements: int
     num_height_elements: int
     element_width_m: np.float64
@@ -30,10 +31,6 @@ class PhasedArray:
             * self.num_height_elements
             * self.element_height_m
         )
-
-    @property
-    def effective_antenna_area_m2(self) -> np.float64:
-        return self.antenna_efficiency * self.antenna_area_m2
 
     @property
     def total_peak_power_w(self) -> np.float64:

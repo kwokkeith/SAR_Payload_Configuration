@@ -2,7 +2,7 @@
 Mission base class for radar satellite missions.
 
 Author: Kwok Keith
-Date: 19 Jan 2026
+Date: 20 Jan 2026
 """
 
 from abc import abstractmethod
@@ -11,6 +11,7 @@ import numpy as np
 from radar_signal import Signal
 from satellite import Satellite
 from phased_array import PhasedArray
+from antenna import Antenna
 from mission_environment import EnvironmentParameters
 from mission_environment import C, BOLTZMAN
 
@@ -20,27 +21,8 @@ class Mission:
     swath_m: np.float64  # Swath width in meters
     signal: Signal
     satellite: Satellite
-    phased_array: PhasedArray
+    antenna: Antenna
     environment_parameters: EnvironmentParameters
-
-    @property
-    def antenna_gain_linear(self) -> np.float64:
-        """Calculate the antenna gain in linear scale."""
-        wavelength_m = self.signal.nominal_wavelength_m
-        A_e = self.phased_array.effective_antenna_area_m2
-        G = (4.0 * np.pi * A_e) / (wavelength_m**2)
-        return G
-
-    @property
-    def antenna_gain_db(self) -> np.float64:
-        """Calculate the antenna gain in dB scale."""
-        G_linear = self.antenna_gain_linear
-        G_db = 10.0 * np.log10(G_linear)
-        return G_db
-
-    @property
-    def average_tx_power_w(self) -> np.float64:
-        return self.phased_array.total_peak_power_w * self.signal.tx_duty_cycle
 
     @property
     def range_resolution_m(self) -> np.float64:
@@ -96,8 +78,8 @@ class Mission:
     def nes0_linear(self) -> np.float64:
         """Calculate the Noise Equivalent Sigma Zero (NES0)."""
         lambda_m = self.signal.nominal_wavelength_m
-        P_avg_w = self.average_tx_power_w
-        G = self.antenna_gain_linear
+        P_avg_w = self.signal.average_tx_power_w
+        G = self.signal.peak_antenna_gain_linear
         L_sys = self.system_loss_linear
         R_m = self.satellite.slant_range_flat_earth_m
         delta_r_m = self.range_resolution_m
