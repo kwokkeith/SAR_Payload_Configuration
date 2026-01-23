@@ -2,7 +2,7 @@
 Dataclass representing radar signal parameters.
 
 Author: Kwok Keith
-Date: 20 Jan 2026
+Date: 22 Jan 2026
 """
 
 from dataclasses import dataclass
@@ -76,3 +76,37 @@ class Signal:
     @property
     def average_tx_power_w(self) -> np.float64:
         return self.antenna.total_peak_power_w * self.tx_duty_cycle
+
+    def gain_pattern_db(self, theta_rad: np.float64, phi_rad: np.float64) -> np.float64:
+        """
+        Calculate the gain pattern in dB for the antenna.
+
+        Args:
+            theta_rad (np.float64): Elevation angle in radians.
+            phi_rad (np.float64): Azimuth angle in radians.
+
+        Returns:
+            np.float64: Gain pattern in dB.
+        """
+        print("Not implemented yet")
+        return None
+
+    def gain_pattern_linear(
+        self, theta_rad: np.float64, phi_rad: np.float64
+    ) -> np.float64:
+        """
+        Calculate the gain pattern in linear scale for the patch antenna.
+
+        Args:
+            theta_rad (np.float64): Elevation angle in radians.
+            phi_rad (np.float64): Azimuth angle in radians.
+
+        Returns:
+            np.float64: Gain pattern in linear scale.
+        """
+        G_pattern_db = self.gain_pattern_db(theta_rad, phi_rad)
+        if G_pattern_db is None:
+            print("Not implemented yet")
+            return None
+        G_pattern_linear = 10.0 ** (G_pattern_db / 10.0)
+        return G_pattern_linear

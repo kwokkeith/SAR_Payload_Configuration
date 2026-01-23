@@ -31,6 +31,11 @@ class Satellite:
         )
 
     @property
+    def look_angle_from_nadir_rad(self) -> np.float64:
+        """Look angle from nadir (radians)."""
+        return np.deg2rad(self.look_angle_from_nadir_deg)
+
+    @property
     def graze_angle_deg(self) -> np.float64:
         """Graze angle measured from horizontal (degrees)."""
         return self.graze_angle_rad * (180.0 / np.pi)
