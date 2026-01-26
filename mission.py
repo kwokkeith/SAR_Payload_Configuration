@@ -24,17 +24,30 @@ class Mission:
     satellite: Satellite
     antenna: Antenna
     environment_parameters: EnvironmentParameters
+    desired_ground_range_m: np.float64 = 1.0 # Desired ground range resolution in meters
+    maximum_NESZ: np.float64 = 1e6 # Maximum acceptable NESZ in linear units
 
     @property
-    def range_resolution_m(self) -> np.float64:
+    def slant_range_resolution_m(self) -> np.float64:
         """
         Calculate the range resolution in metres (this uses traditional formula).
-        Actual range resolution depends on radar signal processing.
+        Actual slant range resolution depends on radar signal processing.
         """
         B = self.signal.bandwidth_hz
         a_wr = self.signal.broadening_factor_range
         delta_r = C / (2.0 * B) * a_wr  # c /(2 * BW) * a_wr
         return delta_r
+
+    def ground_range_resolution_m(self, graze_angle_rad: np.float64) -> np.float64:
+        """
+        Calculate the ground range resolution in metres for a given grazing angle.
+
+        Args:
+            graze_angle_rad: The grazing angle in radians.
+        Returns:
+            The ground range resolution in metres.
+        """
+        return self.slant_range_resolution_m / np.cos(graze_angle_rad)
 
     @property
     def atmospheric_loss_db(self) -> np.float64:
@@ -414,6 +427,24 @@ class Mission:
         nes0_db_corner = self.nes0_db_corner
         nes0_linear_corner = 10.0 ** (nes0_db_corner / 10.0)
         return nes0_linear_corner
+
+    @property
+    def near_look_angle_deg(self) -> np.float64:
+        """
+        Calculate the look angle in degrees to the near edge of the swath.
+        Returns:
+            Look angle in degrees to the near edge of the swath.
+        """
+        a_wr = self.signal.broadening_factor_range
+        graz_near_rad = np.arccos(a_wr * C / (2.0 * self.signal.bandwidth_hz * self.desired_ground_range_m))
+        # Conversion from graze to look angle (curved earth)
+        look_near_rad = np.arcsin(EARTH_RADIUS_M / (EARTH_RADIUS_M + self.satellite.orbit_altitude_m) * np.sin(graz_near_rad + np.pi / 2.0))
+        return np.degrees(look_near_rad)
+        
+    @property
+    def far_look_angle_deg(self) -> np.float64:
+        # TODO: Find the maximum NESZ based on the far look angle. Need to take into account Range and desired swath
+        pass
 
     @abstractmethod
     def azimuth_resolution_m(self) -> np.float64:
