@@ -2,7 +2,7 @@
 Mission base class for radar satellite missions.
 
 Author: Kwok Keith
-Date: 23 Jan 2026
+Date: 26 Jan 2026
 """
 
 from abc import abstractmethod
@@ -172,6 +172,7 @@ class Mission:
         azimuth_center = 0.0
 
         # Boresight direction (pointing at swath center)
+        # Sperical to cartesian coordinates
         boresight_direction = np.array(
             [
                 np.cos(gamma) * np.cos(alpha),
@@ -185,14 +186,14 @@ class Mission:
         range_ref = np.array([1.0, 0.0, 0.0])
         range_ref_perp = (
             range_ref - np.dot(range_ref, boresight_direction) * boresight_direction
-        )
+        )  # Gets the component of range_ref perpendicular to boresight
         range_ref_perp_unit = range_ref_perp / np.linalg.norm(range_ref_perp)
 
         # Azimuth direction (along-track, parallel to velocity)
         azimuth_ref = np.array([0.0, 1.0, 0.0])
         azimuth_ref_perp = (
             azimuth_ref - np.dot(azimuth_ref, boresight_direction) * boresight_direction
-        )
+        )  # Gets the component of azimuth_ref perpendicular to boresight
         azimuth_ref_perp_unit = azimuth_ref_perp / np.linalg.norm(azimuth_ref_perp)
 
         # Helper function to calculate theta, phi, slant_range, and graze_angle for a given corner
@@ -213,11 +214,10 @@ class Mission:
             direction_to_corner = sensor_to_corner / slant_range_corner
 
             # Calculate grazing angle at corner
-            # Grazing angle is the angle from horizontal to the look vector
-            # direction_to_corner[2] is -H/slant_range, which is -sin(look_angle_from_nadir)
-            # For flat Earth, graze_angle = 90° - look_angle_from_nadir
-            look_angle_from_horizontal = np.arcsin(-direction_to_corner[2])
-            graze_angle_corner = np.pi / 2.0 - look_angle_from_horizontal
+            # look_angle_up_from_horizontal: angle from horizontal plane up to look vector
+            # We find the angle between the -look vector and the vertical reference from the swath reference frame
+            # We then subtract 90 degrees from it to find the graze angle
+            grazing_angle = np.pi / 2.0 - np.arccos(-direction_to_corner[2])
 
             # Calculate separable plane angles (range/azimuth) relative to boresight
             boresight_comp = np.dot(boresight_direction, direction_to_corner)
@@ -230,7 +230,12 @@ class Mission:
             # Azimuth angle (phi) in plane of boresight + azimuth axis
             phi_rad = np.arctan2(azimuth_comp, boresight_comp)
 
-            return (theta_rad, phi_rad, slant_range_corner, graze_angle_corner)
+            return (
+                theta_rad,
+                phi_rad,
+                slant_range_corner,
+                grazing_angle,
+            )
 
         # Calculate angles for all four corners
         # Near range = negative offset, Far range = positive offset
