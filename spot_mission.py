@@ -2,7 +2,7 @@
 Spot Mission class for radar satellite missions for SPOTlight SAR processing.
 
 Author: Kwok Keith
-Date: 19 Jan 2026
+Date: 27 Jan 2026
 """
 
 import numpy as np
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 @dataclass
 class SpotMission(Mission):
-    integration_angle_deg: np.float64  # Azimuth angle in degrees
+    integration_angle_deg: np.float64 = 20.0  # Azimuth angle in degrees
 
     @property
     def azimuth_resolution_m(self):
