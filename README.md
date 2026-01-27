@@ -4,6 +4,10 @@ This repository allows SAR payload designers to set mission parameters required 
 
 It includes a way to check for a SAR system's NESZ, ground range resolution and is modularisable for other antenna and SAR processing types.
 
+Reference Material:
+
+Doerry, A. W. (2006). Performance limits for synthetic aperture radar (2nd ed., SAND2006-0821). Sandia National Laboratories. https://doi.org/10.2172/773988
+
 ## Core Module Overview
 
 ### Mission Planning & Optimization
@@ -188,4 +192,5 @@ print(f"Look angle range: {min_look:.2f}° to {max_look:.2f}°")
 
 Kwok Keith  
 January 2026
+
 
