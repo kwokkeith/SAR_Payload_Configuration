@@ -8,6 +8,7 @@ Date: 27 Jan 2026
 from dataclasses import dataclass
 import numpy as np
 from mission import Mission
+from mission_environment import C, EARTH_RADIUS_M
 
 @dataclass
 class MissionOptimiser:
@@ -18,6 +19,7 @@ class MissionOptimiser:
     ) -> dict:
         """
         Find the maximum look angle from nadir that achieves a desired worst-case NESZ.
+        Given current swath size optimise boresight look angle.
         
         Args:
             desired_nesz_db: Target NESZ value in dB (e.g., -25 dB)
@@ -44,7 +46,8 @@ class MissionOptimiser:
         max_swath_m: float = 500e3
     ) -> dict:
         """
-        Find the maximum swath dimensions that achieve a desired worst-case NESZ.
+        Find the maximum swath dimensions that achieve a desired worst-case NESZ. 
+        Given current boresight angle optimise swath dimensions.
         
         Args:
             desired_nesz_db: Target maximum NESZ value in dB (e.g., -25 dB)
@@ -98,6 +101,122 @@ class MissionOptimiser:
             desired_ground_range_resolution_m, tolerance_m, max_iterations
         )
 
+    def optimise_for_maximum_swath(
+        self,
+        desired_nesz_db: float,
+        desired_resolution_m: float | None = None,
+        aspect_ratio: float = 1.0,
+        min_boresight_deg: float = 20.0,
+        max_boresight_deg: float = 70.0,
+        boresight_samples: int = 20,
+        tolerance_db: float = 0.1,
+        max_iterations: int = 100
+    ) -> dict:
+        """
+        Find the optimal boresight angle and swath dimensions that maximize swath area
+        while meeting NESZ and optionally resolution requirements.
+        
+        This searches over different boresight angles and finds the configuration
+        that gives the largest swath area meeting all constraints.
+        
+        Args:
+            desired_nesz_db: Maximum acceptable NESZ in dB (e.g., -20 dB or 80 dB depending on convention)
+            desired_resolution_m: Minimum ground range resolution in meters (optional)
+            aspect_ratio: Ratio of swath_range / swath_azimuth (default: 1.0 for square)
+            min_boresight_deg: Minimum boresight angle to search (default: 20°)
+            max_boresight_deg: Maximum boresight angle to search (default: 70°)
+            boresight_samples: Number of boresight angles to test (default: 20)
+            tolerance_db: NESZ tolerance in dB (default: 0.1 dB)
+            max_iterations: Maximum iterations for optimization (default: 100)
+            
+        Returns:
+            Dictionary containing:
+                - 'optimal_boresight_deg': Best boresight angle in degrees
+                - 'swath_range_m': Optimal range swath dimension in meters
+                - 'swath_azimuth_m': Optimal azimuth swath dimension in meters
+                - 'swath_area_km2': Maximum achievable swath area in square kilometers
+                - 'achieved_nesz_db': Actual NESZ at corners in dB
+                - 'near_look_angle_deg': Look angle to near edge in degrees
+                - 'far_look_angle_deg': Look angle to far corner in degrees
+                - 'converged': Whether optimization converged
+                - 'resolution_constraint_met': Whether resolution requirement was met (if specified)
+        """
+        # Store original configuration
+        original_boresight = self.mission.satellite.look_angle_from_nadir_deg
+        original_swath_range = self.mission.swath_range_m
+        original_swath_azimuth = self.mission.swath_azimuth_m
+        
+        # Search grid of boresight angles
+        boresight_angles = np.linspace(min_boresight_deg, max_boresight_deg, boresight_samples)
+        
+        best_area = 0.0
+        best_config = None
+        
+        for boresight_deg in boresight_angles:
+            # Set test boresight
+            self.mission.satellite.look_angle_from_nadir_deg = boresight_deg
+            
+            # Check resolution constraint if specified
+            if desired_resolution_m is not None:
+                min_look_result = self.optimise_min_look_angle_for_resolution(desired_resolution_m)
+                if not min_look_result['converged'] or min_look_result['look_angle_deg'] > boresight_deg:
+                    # Resolution cannot be met at this boresight
+                    continue
+            
+            # Find maximum swath at this boresight
+            swath_result = self.optimise_swath_for_nesz(
+                desired_nesz_db=desired_nesz_db,
+                aspect_ratio=aspect_ratio,
+                tolerance_db=tolerance_db,
+                max_iterations=max_iterations
+            )
+            
+            if not swath_result['converged']:
+                continue
+            
+            # Check if this is the best so far
+            swath_area = swath_result['swath_area_km2']
+            if swath_area > best_area:
+                best_area = swath_area
+                
+                # Set mission to this configuration to get look angles
+                self.mission.swath_range_m = swath_result['swath_range_m']
+                self.mission.swath_azimuth_m = swath_result['swath_azimuth_m']
+                near_look, far_look = self.mission.look_angle_range_deg
+                
+                best_config = {
+                    'optimal_boresight_deg': boresight_deg,
+                    'swath_range_m': swath_result['swath_range_m'],
+                    'swath_azimuth_m': swath_result['swath_azimuth_m'],
+                    'swath_area_km2': swath_area,
+                    'achieved_nesz_db': swath_result['achieved_nesz_db'],
+                    'near_look_angle_deg': near_look,
+                    'far_look_angle_deg': far_look,
+                    'converged': True,
+                    'resolution_constraint_met': True if desired_resolution_m is not None else None,
+                }
+        
+        # Restore original configuration
+        self.mission.satellite.look_angle_from_nadir_deg = original_boresight
+        self.mission.swath_range_m = original_swath_range
+        self.mission.swath_azimuth_m = original_swath_azimuth
+        
+        if best_config is None:
+            # No valid configuration found
+            return {
+                'optimal_boresight_deg': np.nan,
+                'swath_range_m': 0.0,
+                'swath_azimuth_m': 0.0,
+                'swath_area_km2': 0.0,
+                'achieved_nesz_db': np.nan,
+                'near_look_angle_deg': np.nan,
+                'far_look_angle_deg': np.nan,
+                'converged': False,
+                'resolution_constraint_met': False,
+            }
+        
+        return best_config
+
     def calculate_swath_from_look_angles(
         self,
         min_look_angle_deg: float,
@@ -121,8 +240,6 @@ class MissionOptimiser:
                 - 'swath_area_km2': Total swath area in square kilometers
                 - 'boresight_look_angle_deg': Required boresight look angle in degrees
         """
-        from mission_environment import EARTH_RADIUS_M
-        
         H = self.mission.satellite.orbit_altitude_m
         look_angle_center_rad = self.mission.satellite.look_angle_from_nadir_rad
         
@@ -192,92 +309,82 @@ class MissionOptimiser:
     ) -> dict:
         """
         Calculate the minimum look angle from nadir that achieves desired ground range resolution.
-        Uses binary search for efficiency.
+        Uses direct calculation from resolution to grazing angle to look angle.
+        
+        Ground range resolution = (C / (2 * B)) * a_wr / cos(graze_angle)
+        Solving for graze_angle: graze_angle = arccos((C / (2 * B)) * a_wr / desired_resolution)
         """
+        
         # Store original look angle to restore later
         original_look_angle = self.mission.satellite.look_angle_from_nadir_deg
         
-        # Initialise binary search bounds
-        # Start with a reasonable range: 0° to 90° from nadir
-        look_angle_min_deg = 0.0
-        look_angle_max_deg = 90.0
+        # Calculate required grazing angle for desired resolution
+        a_wr = self.mission.signal.broadening_factor_range
+        B = self.mission.signal.bandwidth_hz
         
-        converged = False
-        iterations = 0
-        best_look_angle = look_angle_max_deg
-        best_resolution = float('inf')
+        # From: ground_range_resolution = slant_range_resolution / cos(graze_angle)
+        # where slant_range_resolution = (C / (2 * B)) * a_wr
+        # Therefore: cos(graze_angle) = (C / (2 * B)) * a_wr / desired_resolution
+        cos_graze = (C / (2.0 * B)) * a_wr / desired_ground_range_resolution_m
         
-        for _ in range(max_iterations):
-            iterations += 1
-            
-            # Try midpoint of current range
-            look_angle_test = (look_angle_min_deg + look_angle_max_deg) / 2.0
-            
-            # Temporarily update satellite look angle
-            self.mission.satellite.look_angle_from_nadir_deg = look_angle_test
-            
-            # Get grazing angle at this look angle
-            graze_angle_rad = self.mission.satellite.graze_angle_rad
-            
-            # Check if grazing angle is valid
-            if not np.isfinite(graze_angle_rad):
-                # Invalid geometry, increase look angle
-                look_angle_min_deg = look_angle_test
-                continue
-            
-            # Calculate ground range resolution at this grazing angle
-            current_resolution_m = self.mission.ground_range_resolution_m(graze_angle_rad)
-            
-            # Check if we have a valid result
-            if not np.isfinite(current_resolution_m):
-                # Invalid resolution, increase look angle
-                look_angle_min_deg = look_angle_test
-                continue
-            
-            # Check if converged
-            if abs(current_resolution_m - desired_ground_range_resolution_m) <= tolerance_m:
-                converged = True
-                best_look_angle = look_angle_test
-                best_resolution = current_resolution_m
-                break
-            
-            # Update best if this is closer and meets requirement
-            if current_resolution_m <= desired_ground_range_resolution_m:
-                if abs(current_resolution_m - desired_ground_range_resolution_m) < abs(best_resolution - desired_ground_range_resolution_m):
-                    best_look_angle = look_angle_test
-                    best_resolution = current_resolution_m
-            
-            # Adjust search range based on result
-            # Ground range resolution = slant_range_resolution / cos(graze_angle)
-            # Larger graze angle (larger look angle) → smaller cos(graze) → better (smaller) resolution
-            # Smaller graze angle (smaller look angle) → larger cos(graze) → worse (larger) resolution
-            if current_resolution_m > desired_ground_range_resolution_m:
-                # Current resolution is worse (too coarse), need larger look angle
-                look_angle_min_deg = look_angle_test
-            else:
-                # Current resolution is better (finer), can try smaller look angle
-                look_angle_max_deg = look_angle_test
-            
-            # Check if search range has become too narrow
-            if abs(look_angle_max_deg - look_angle_min_deg) < 0.001:
-                break
+        # Check if physically feasible
+        if cos_graze > 1.0:
+            # Resolution requirement is too fine - cannot be achieved
+            # Restore original look angle
+            self.mission.satellite.look_angle_from_nadir_deg = original_look_angle
+            return {
+                'look_angle_deg': np.float64(90.0),
+                'achieved_resolution_m': (C / (2.0 * B)) * a_wr,  # Best possible at 90°
+                'graze_angle_deg': np.float64(0.0),
+                'iterations': 0,
+                'converged': False,
+                'error_m': np.inf,
+            }
         
-        # Set to best found angle and get final values
-        self.mission.satellite.look_angle_from_nadir_deg = best_look_angle
-        final_graze_angle_rad = self.mission.satellite.graze_angle_rad
-        final_graze_angle_deg = np.degrees(final_graze_angle_rad)
-        final_resolution_m = self.mission.ground_range_resolution_m(final_graze_angle_rad)
+        if cos_graze < 0.0:
+            # Invalid - this shouldn't happen with positive resolution
+            raise ValueError(f"Invalid resolution requirement: {desired_ground_range_resolution_m} m")
+        
+        # Calculate grazing angle
+        graze_angle_rad = np.arccos(cos_graze)
+        graze_angle_deg = np.degrees(graze_angle_rad)
+        
+        # Convert grazing angle to look angle from nadir using spherical Earth geometry
+        H = self.mission.satellite.orbit_altitude_m
+        
+        # From grazing angle, calculate look angle
+        # graze_angle is measured from horizontal
+        # Incidence angle from vertical = π/2 - graze_angle
+        incidence_angle = np.pi / 2.0 - graze_angle_rad
+        
+        # Using spherical Earth geometry:
+        # sin(look_angle) = (R_E / (R_E + H)) * sin(incidence_angle)
+        sin_look = (EARTH_RADIUS_M / (EARTH_RADIUS_M + H)) * np.sin(incidence_angle)
+        
+        # Clip to valid range to avoid domain errors
+        sin_look = np.clip(sin_look, -1.0, 1.0)
+        
+        look_angle_rad = np.arcsin(sin_look)
+        look_angle_deg = np.degrees(look_angle_rad)
+        
+        # Verify by calculating actual resolution at this look angle
+        self.mission.satellite.look_angle_from_nadir_deg = look_angle_deg
+        achieved_graze_angle_rad = self.mission.satellite.graze_angle_rad
+        achieved_resolution_m = self.mission.ground_range_resolution_m(achieved_graze_angle_rad)
+        
+        # Check convergence
+        converged = abs(achieved_resolution_m - desired_ground_range_resolution_m) <= tolerance_m
         
         # Restore original look angle
         self.mission.satellite.look_angle_from_nadir_deg = original_look_angle
         
         return {
-            'look_angle_deg': np.float64(best_look_angle),
-            'achieved_resolution_m': final_resolution_m,
-            'graze_angle_deg': final_graze_angle_deg,
-            'iterations': iterations,
+            'look_angle_deg': np.float64(look_angle_deg),
+            'achieved_resolution_m': achieved_resolution_m,
+            'graze_angle_deg': graze_angle_deg,
+            'iterations': 1,
             'converged': converged,
-            'error_m': final_resolution_m - desired_ground_range_resolution_m,
+            'error_m': achieved_resolution_m - desired_ground_range_resolution_m,
         }
 
     def _calculate_max_look_angle_for_nesz(
@@ -357,11 +464,36 @@ class MissionOptimiser:
         self.mission.satellite.look_angle_from_nadir_deg = best_look_angle
         all_corners = self.mission.nes0_db_all_corners
         
+        # Calculate actual look angles to the corners from nadir
+        # Get the angular offsets to corners
+        corners_angles = self.mission.elevation_yaw_angles_to_corners_rad
+        
+        # Find the far corner (maximum slant range)
+        far_corner_idx = np.argmax([corners_angles[i][2] for i in range(4)])
+        _,_,_, graze_far = corners_angles[far_corner_idx]
+        
+        # Calculate look angle to far corner from nadir using exact geometry
+        # Satellite at height H, slant range to corner is slant_range_far
+        # Look angle from nadir: angle between vertical and slant range vector
+        H = self.mission.satellite.orbit_altitude_m
+        
+        # Using spherical Earth geometry:
+        # From grazing angle at corner, we can get the incidence angle at corner
+        # Then use spherical law of sines to get look angle from satellite
+        incidence_angle_far = np.pi / 2.0 - graze_far
+        
+        # Spherical law of sines: sin(look_angle) / R_E = sin(incidence_angle) / (R_E + H)
+        sin_look_far = (EARTH_RADIUS_M / (EARTH_RADIUS_M + H)) * np.sin(incidence_angle_far)
+        sin_look_far = np.clip(sin_look_far, -1.0, 1.0)
+        look_angle_far_rad = np.arcsin(sin_look_far)
+        look_angle_far_deg = np.degrees(look_angle_far_rad)
+        
         # Restore original look angle
         self.mission.satellite.look_angle_from_nadir_deg = original_look_angle
         
         return {
-            'look_angle_deg': np.float64(best_look_angle),
+            'look_angle_deg': np.float64(look_angle_far_deg),  # Return far corner angle, not boresight
+            'boresight_look_angle_deg': np.float64(best_look_angle),  # Also return boresight
             'achieved_nesz_db': best_nesz,
             'iterations': iterations,
             'converged': converged,
