@@ -2,7 +2,7 @@
 Mission base class for radar satellite missions.
 
 Author: Kwok Keith
-Date: 26 Jan 2026
+Date: 27 Jan 2026
 """
 
 from abc import abstractmethod
@@ -26,15 +26,26 @@ class Mission:
     environment_parameters: EnvironmentParameters
 
     @property
-    def range_resolution_m(self) -> np.float64:
+    def slant_range_resolution_m(self) -> np.float64:
         """
         Calculate the range resolution in metres (this uses traditional formula).
-        Actual range resolution depends on radar signal processing.
+        Actual slant range resolution depends on radar signal processing.
         """
         B = self.signal.bandwidth_hz
         a_wr = self.signal.broadening_factor_range
         delta_r = C / (2.0 * B) * a_wr  # c /(2 * BW) * a_wr
         return delta_r
+
+    def ground_range_resolution_m(self, graze_angle_rad: np.float64) -> np.float64:
+        """
+        Calculate the ground range resolution in metres for a given grazing angle.
+
+        Args:
+            graze_angle_rad: The grazing angle in radians.
+        Returns:
+            The ground range resolution in metres.
+        """
+        return self.slant_range_resolution_m / np.cos(graze_angle_rad)
 
     @property
     def atmospheric_loss_db(self) -> np.float64:
@@ -100,7 +111,7 @@ class Mission:
             if slant_range_m is not None
             else self.satellite.slant_range_flat_earth_m
         )
-        delta_r_m = self.range_resolution_m
+        delta_r_m = self.slant_range_resolution_m
         a_wa = self.signal.broadening_factor_azimuth
         v_x = self.satellite.platform_velocity_mps
         kTF_N = self.thermal_loss_linear
@@ -161,6 +172,19 @@ class Mission:
             0.0  # Azimuth heading (0 = perpendicular to flight path for side-looking)
         )
 
+        # Check for invalid or degenerate grazing angles
+        if not np.isfinite(gamma) or np.abs(gamma) < 1e-10 or np.abs(gamma - np.pi/2) < 1e-10:
+            # Degenerate case: looking straight down, horizontally, or invalid geometry
+            degenerate_tuple = (np.float64(0.0), np.float64(0.0), H, np.float64(0.0))
+            return (degenerate_tuple, degenerate_tuple, degenerate_tuple, degenerate_tuple)
+        
+        # Check if tan(gamma) is valid before using it
+        tan_gamma = np.tan(gamma)
+        if not np.isfinite(tan_gamma) or np.abs(tan_gamma) < 1e-10:
+            # Degenerate case: tan(gamma) is zero, infinity, or NaN
+            degenerate_tuple = (np.float64(0.0), np.float64(0.0), H, np.float64(0.0))
+            return (degenerate_tuple, degenerate_tuple, degenerate_tuple, degenerate_tuple)
+
         # Ground swath dimensions relative to center
         half_range_m = self.swath_range_m / 2.0  # Range (across-track)
         half_azimuth_m = self.swath_azimuth_m / 2.0  # Azimuth (along-track)
@@ -168,7 +192,7 @@ class Mission:
         # Ground position of swath center (where boresight points)
         # For side-looking SAR, alpha ≈ 0, so:
         # Center is at ground position (H*cot(gamma), 0, 0)
-        range_center: np.float64 = H / np.tan(gamma)
+        range_center: np.float64 = H / tan_gamma
         azimuth_center = 0.0
 
         # Boresight direction (pointing at swath center)
@@ -187,14 +211,22 @@ class Mission:
         range_ref_perp = (
             range_ref - np.dot(range_ref, boresight_direction) * boresight_direction
         )  # Gets the component of range_ref perpendicular to boresight
-        range_ref_perp_unit = range_ref_perp / np.linalg.norm(range_ref_perp)
+        range_ref_perp_norm = np.linalg.norm(range_ref_perp)
+        if range_ref_perp_norm < 1e-10:
+            range_ref_perp_unit = np.array([1.0, 0.0, 0.0])
+        else:
+            range_ref_perp_unit = range_ref_perp / range_ref_perp_norm
 
         # Azimuth direction (along-track, parallel to velocity)
         azimuth_ref = np.array([0.0, 1.0, 0.0])
         azimuth_ref_perp = (
             azimuth_ref - np.dot(azimuth_ref, boresight_direction) * boresight_direction
         )  # Gets the component of azimuth_ref perpendicular to boresight
-        azimuth_ref_perp_unit = azimuth_ref_perp / np.linalg.norm(azimuth_ref_perp)
+        azimuth_ref_perp_norm = np.linalg.norm(azimuth_ref_perp)
+        if azimuth_ref_perp_norm < 1e-10:
+            azimuth_ref_perp_unit = np.array([0.0, 1.0, 0.0])
+        else:
+            azimuth_ref_perp_unit = azimuth_ref_perp / azimuth_ref_perp_norm
 
         # Helper function to calculate theta, phi, slant_range, and graze_angle for a given corner
         def calculate_corner_angles(
@@ -211,6 +243,9 @@ class Mission:
             slant_range_corner = np.linalg.norm(sensor_to_corner)
 
             # Unit direction vector to corner
+            if slant_range_corner < 1e-10:
+                # Degenerate case: sensor is at corner position
+                return (0.0, 0.0, 0.0, 0.0)
             direction_to_corner = sensor_to_corner / slant_range_corner
 
             # Calculate grazing angle at corner
@@ -333,6 +368,29 @@ class Mission:
         gamma = self.satellite.graze_angle_rad
         alpha = 0.0  # Side-looking SAR
 
+        # Check for invalid or degenerate grazing angles
+        if not np.isfinite(gamma) or np.abs(gamma) < 1e-10 or np.abs(gamma - np.pi/2) < 1e-10:
+            # Return default values for degenerate geometry
+            return (np.nan, {
+                "theta_rad": 0.0,
+                "phi_rad": 0.0,
+                "gain_db": 0.0,
+                "slant_range_m": H,
+                "graze_angle_rad": 0.0,
+            })
+        
+        # Check if tan(gamma) is valid before using it
+        tan_gamma = np.tan(gamma)
+        if not np.isfinite(tan_gamma) or np.abs(tan_gamma) < 1e-10:
+            # Return default values for degenerate geometry
+            return (np.nan, {
+                "theta_rad": 0.0,
+                "phi_rad": 0.0,
+                "gain_db": 0.0,
+                "slant_range_m": H,
+                "graze_angle_rad": 0.0,
+            })
+
         # Boresight direction
         boresight_direction = np.array(
             [
@@ -343,7 +401,7 @@ class Mission:
         )
 
         # Ground center position
-        range_center: np.float64 = H / np.tan(gamma)
+        range_center: np.float64 = H / tan_gamma
         azimuth_center = 0.0
 
         # Reference directions for phi calculation
@@ -351,13 +409,21 @@ class Mission:
         range_ref_perp = (
             range_ref - np.dot(range_ref, boresight_direction) * boresight_direction
         )
-        range_ref_perp_unit = range_ref_perp / np.linalg.norm(range_ref_perp)
+        range_ref_perp_norm = np.linalg.norm(range_ref_perp)
+        if range_ref_perp_norm < 1e-10:
+            range_ref_perp_unit = np.array([1.0, 0.0, 0.0])
+        else:
+            range_ref_perp_unit = range_ref_perp / range_ref_perp_norm
 
         azimuth_ref = np.array([0.0, 1.0, 0.0])
         azimuth_ref_perp = (
             azimuth_ref - np.dot(azimuth_ref, boresight_direction) * boresight_direction
         )
-        azimuth_ref_perp_unit = azimuth_ref_perp / np.linalg.norm(azimuth_ref_perp)
+        azimuth_ref_perp_norm = np.linalg.norm(azimuth_ref_perp)
+        if azimuth_ref_perp_norm < 1e-10:
+            azimuth_ref_perp_unit = np.array([0.0, 1.0, 0.0])
+        else:
+            azimuth_ref_perp_unit = azimuth_ref_perp / azimuth_ref_perp_norm
 
         # Calculate ground position
         position_range = range_center + range_offset_m
@@ -366,6 +432,17 @@ class Mission:
         # Vector from sensor to position
         sensor_to_position = np.array([position_range, position_azimuth, -H])
         slant_range = np.linalg.norm(sensor_to_position)
+        
+        if slant_range < 1e-10:
+            # Degenerate case
+            return (np.nan, {
+                "theta_rad": 0.0,
+                "phi_rad": 0.0,
+                "gain_db": 0.0,
+                "slant_range_m": 0.0,
+                "graze_angle_rad": 0.0,
+            })
+        
         direction_to_position = sensor_to_position / slant_range
 
         # Calculate grazing angle
@@ -415,7 +492,60 @@ class Mission:
         nes0_linear_corner = 10.0 ** (nes0_db_corner / 10.0)
         return nes0_linear_corner
 
-    @abstractmethod
+    @property
+    def look_angle_range_deg(self) -> tuple[np.float64, np.float64]:
+        """
+        Calculate the minimum and maximum look angles in degrees across the entire swath.
+        
+        Minimum look angle: to the near edge at the centerline (closest point to nadir)
+        Maximum look angle: to the far corner (furthest point from nadir, worst NESZ)
+
+        Returns:
+            Tuple of (min_look_angle_deg, max_look_angle_deg)
+        """
+        H = self.satellite.orbit_altitude_m
+        look_angle_center_rad = self.satellite.look_angle_from_nadir_rad
+        
+        # Convert boresight look angle to ground arc angle using spherical earth geometry
+        # From spherical law of sines: sin(θ_look)/(R_E) = sin(ψ)/(R_E + H)
+        # where ψ is the arc angle from nadir on the ground
+        arc_angle_center = np.arcsin(
+            (EARTH_RADIUS_M + H) * np.sin(look_angle_center_rad) / EARTH_RADIUS_M
+        )
+        
+        # Ground range to center (arc length on spherical earth)
+        ground_range_center = arc_angle_center * EARTH_RADIUS_M
+        
+        # Minimum look angle: near edge at centerline (no azimuth offset)
+        near_edge_range = ground_range_center - self.swath_range_m / 2.0
+        
+        if near_edge_range <= 0:
+            min_look_angle_deg = np.float64(0.0)
+        else:
+            arc_angle_near_edge = near_edge_range / EARTH_RADIUS_M
+            look_angle_near_edge_rad = np.arcsin(
+                EARTH_RADIUS_M * np.sin(arc_angle_near_edge) / (EARTH_RADIUS_M + H)
+            )
+            min_look_angle_deg = np.degrees(look_angle_near_edge_rad)
+        
+        # Maximum look angle: far corner (with both range and azimuth offset)
+        far_range = ground_range_center + self.swath_range_m / 2.0
+        far_azimuth = self.swath_azimuth_m / 2.0
+        ground_range_far_corner = np.sqrt(far_range**2 + far_azimuth**2)
+        
+        arc_angle_far_corner = ground_range_far_corner / EARTH_RADIUS_M
+        look_angle_far_corner_rad = np.arcsin(
+            EARTH_RADIUS_M * np.sin(arc_angle_far_corner) / (EARTH_RADIUS_M + H)
+        )
+        max_look_angle_deg = np.degrees(look_angle_far_corner_rad)
+        
+        if max_look_angle_deg < min_look_angle_deg:
+            raise ValueError("Maximum look angle is less than minimum look angle, invalid geometry.")
+        
+        return (min_look_angle_deg, max_look_angle_deg)
+
+
+    @property
     def azimuth_resolution_m(self) -> np.float64:
         """Calculate the azimuth resolution in metres."""
-        pass
+        raise NotImplementedError("Subclasses must implement azimuth_resolution_m property.")

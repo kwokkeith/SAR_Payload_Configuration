@@ -2,7 +2,7 @@
 Satellite platform parameters and derived properties.
 
 Author: Kwok Keith
-Date: 19 Jan 2026
+Date: 27 Jan 2026
 """
 
 from dataclasses import dataclass
@@ -10,7 +10,7 @@ import numpy as np
 from mission_environment import EARTH_RADIUS_M
 
 
-@dataclass(frozen=True)
+@dataclass
 class Satellite:
     platform_velocity_mps: np.float64  # V_p
     orbit_altitude_m: np.float64  # H
@@ -21,14 +21,16 @@ class Satellite:
     @property
     def graze_angle_rad(self) -> np.float64:
         """Graze angle measured from horizontal (radians)."""
-        return np.abs(
-            np.arcsin(
-                (EARTH_RADIUS_M + self.orbit_altitude_m)
-                * np.sin(np.deg2rad(self.look_angle_from_nadir_deg))
-                / EARTH_RADIUS_M
-            )
-            - np.deg2rad(90.0)
+        # Calculate the argument for arcsin
+        arcsin_arg = (
+            (EARTH_RADIUS_M + self.orbit_altitude_m)
+            * np.sin(np.deg2rad(self.look_angle_from_nadir_deg))
+            / EARTH_RADIUS_M
         )
+        # to avoid domain errors in arcsin
+        arcsin_arg = np.clip(arcsin_arg, -1.0, 1.0)
+        
+        return np.abs(np.arcsin(arcsin_arg) - np.deg2rad(90.0))
 
     @property
     def look_angle_from_nadir_rad(self) -> np.float64:
