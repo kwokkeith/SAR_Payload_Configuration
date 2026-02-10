@@ -40,8 +40,10 @@ class PatchAntennaSignal(Signal):
         u_azimuth = (k * W / 2.0) * np.sin(phi_rad)
         F_azimuth = np.sinc(u_azimuth / np.pi)
 
-        # 3D pattern is product of elevation and azimuth patterns
-        mag = F_elevation * F_azimuth
+        # 3D pattern is product of elevation and azimuth patterns.
+        # Take absolute value because the sinc field pattern can be negative;
+        # gain should be based on field magnitude (or power), not signed field.
+        mag = np.abs(F_elevation * F_azimuth)
 
         return np.clip(mag, 0.0, 1.0)
 
